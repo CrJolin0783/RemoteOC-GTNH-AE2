@@ -1,0 +1,9 @@
+APScheduler~=3.11.0
+pydantic~=2.10.4
+python-dotenv~=1.0.1
+requests
+fastapi
+uvicorn
+redis~=5.0.0
+msgpack~=1.0.0
+python-multipart

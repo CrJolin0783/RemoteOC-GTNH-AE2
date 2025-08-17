@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker build:*)",
+      "Bash(docker:*)",
+      "Bash(copy:*)",
+      "Bash(cp:*)",
+      "Bash(curl:*)",
+      "Bash(python:*)",
+      "Bash(dir)",
+      "Bash(timeout:*)",
+      "Bash(npm install:*)",
+      "Bash(pip install:*)",
+      "Bash(where:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

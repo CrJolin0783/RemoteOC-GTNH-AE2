@@ -1,0 +1,56 @@
+version: "3"
+services:
+  roc-gtnh-redis:
+    image: redis:7-alpine
+    container_name: roc-gtnh-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./server/redis.conf:/etc/redis/redis.conf
+      - redis_data:/data
+    command: redis-server /etc/redis/redis.conf
+    restart: always
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  roc-gtnh-frontend:
+    build:
+      context: ./website
+      dockerfile: Dockerfile
+    container_name: roc-gtnh-frontend
+    # 如果开启https，请提供证书，将USE_HTTPS设置为true，将443端口映射到宿主机
+    #volumes:
+    #  - ./server.crt:/etc/nginx/etc/crt/server.crt
+    #  - ./server.key:/etc/nginx/etc/crt/server.key
+    environment:
+      - SERVER_NAME=localhost # 域名或localhost(本地)
+      - USE_HTTPS=false
+    ports:
+      - "26767:80"
+      # - "443:443"
+    restart: always
+    depends_on:
+      - roc-gtnh-backend
+
+  roc-gtnh-backend:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: roc-gtnh-backend
+    env_file:
+      - .env
+    environment:
+      - REDIS_URL=redis://roc-gtnh-redis:6379/0
+      - USE_REDIS=true
+    ports:
+      # 端口映射到宿主机，如果需要修改宿主机端口，请修改为"宿主机端口:1030"
+      - "26766:1030"
+    restart: always
+    depends_on:
+      - roc-gtnh-redis
+
+volumes:
+  redis_data:

@@ -1,0 +1,398 @@
+import os
+from dotenv import load_dotenv
+from callback import *
+from action import *
+
+__version__ = "1.1.0"
+
+# 加载 .env 文件中的环境变量
+if os.path.exists('.env.dev'):
+    load_dotenv('.env.dev')
+load_dotenv()
+
+
+# 定时任务设置
+timer_task_config = {
+    # "timer_task_1": {  # 键名为任务名，用于查询，可自定义
+    #     'interval': 15,  # 定时器间隔(秒)
+    #     'client_id': 'client_01',  # 指定执行命令的OC客户端id
+    #     'commands': [  # 远程执行的命令列表
+    #         "return 114514",
+    #     ],
+    #     # 命令执行后的回调函数，callback(results: list)
+    #     'callback': test,
+    # },
+}
+
+
+# 任务组设置，该任务执行结束后会调用callback，该任务记录不会被清除
+task_config = {
+    "getCpuDetailList": {  # 获取CPU详细信息列表
+        "client_id": "client_01",  # 指定执行命令的OC客户端id
+        "commands": [  # 远程执行的命令列表
+            "return ae.getCpuList(true)",
+        ],
+        "cache": True,
+        "handle": None,
+        "callback": None,
+    },
+    "getCpuList": {  # 获取CPU简易信息列表
+        "client_id": "client_01",
+        "commands": [
+            "return ae.getCpuList()",
+        ],
+        "cache": True,
+        "handle": None,
+        "callback": None,
+    },
+    "getAllItems": {  # 获取AE网络里所有物品信息
+        "client_id": "client_01",
+        "commands": [
+            "return ae.getAllItems({filter})",
+        ],
+        "cache": True,
+        "handle": None,
+        "callback": None,
+        "chunked": True,  # 由于数据量过大，启用分块上传。
+        "dynamic_params": {
+            "filter": {
+                "type": "dict",
+                "default": {},
+                "description": "物品过滤参数"
+            }
+        }
+    },
+    "getAllSilempleItems": {  # 获取AE网络里所有物品信息
+        "client_id": "client_01",
+        "commands": [
+            "return ae.getAllSilempleItems({filter})",
+        ],
+        "cache": True,
+        "handle": None,
+        "callback": None,
+        "chunked": True,
+        "dynamic_params": {
+            "filter": {
+                "type": "dict",
+                "default": {},
+                "description": "物品过滤参数"
+            }
+        }
+    },
+    "getAllCraftables": {  # 获取AE网络里所有可合成的物品信息
+        "client_id": "client_01",
+        "commands": [
+            "return ae.getAllCraftables()",
+        ],
+        "cache": True,
+        "handle": None,
+        "callback": None,
+    },
+    "getFilteredItems": {  # 获取过滤后的物品信息
+        "client_id": "client_01",
+        "commands": [
+            "return ae.getFilteredItems({filters}, {page}, {page_size}, {sort_by}, {sort_order})",
+        ],
+        "cache": True,
+        "handle": None,
+        "callback": None,
+        "chunked": True,
+        "dynamic_params": {
+            "filters": {
+                "type": "dict",
+                "default": {},
+                "description": "过滤条件 (name, label, min_size, max_size, craftable_only, has_tag)"
+            },
+            "page": {
+                "type": "int",
+                "default": 1,
+                "description": "页码"
+            },
+            "page_size": {
+                "type": "int",
+                "default": 100,
+                "description": "每页大小"
+            },
+            "sort_by": {
+                "type": "str",
+                "default": "name",
+                "description": "排序字段 (name, label, size, damage)"
+            },
+            "sort_order": {
+                "type": "str",
+                "default": "asc",
+                "description": "排序方向 (asc, desc)"
+            }
+        }
+    },
+    "getAllCraftablesAndCpus": {  # 获取AE网络里所有可合成的物品信息和CPU信息
+        "client_id": "client_01",
+        "commands": ["return ae.getAllCraftables()", "return ae.getCpuList()"],
+        "cache": True,
+        "handle": None,
+        "callback": None,
+    },
+    "monitor": {
+        "client_id": "client_01",
+        "commands": [
+            "return getCapacitorInfo()",  # 获取兰波顿电容库数据
+            "return calculate_fluid_me_totals()",  # 获取流体存储元件数据
+            "return calculate_item_me_totals()",  # 获取物品存储元件数据
+        ],
+        "cache": True,
+        "handle": parse_data,
+        "callback": None,
+    },
+}
+
+
+# 触发器设置
+trigger_config = {
+    "CPU空闲时": {
+        "interval": 180,  # 任务执行间隔
+        "description": "当CPU空闲时执行任务",
+        "task": {
+            # 用占位符{xxx}表示参数，用于动态替换
+            "task_id": None,  # 任务 ID, None 则自动生成
+            "client_id": "{client_id}",
+            "commands": [
+                "return ae.getCpuInfoByName('{cpu_name}')",
+            ],
+            "handle": check_cpu_free,  # 返回值为 True 时执行任务
+        },
+        "args": [
+            # tpye: str, int, float, bool
+            {
+                "key": "client_id",
+                "field": "client_id",
+                "type": "str",
+                "default": "",
+                "description": "客户端 ID",
+            },
+            {
+                "key": "cpu_name",
+                "field": "cpu_name",
+                "type": "str",
+                "description": "CPU 名称",
+            },
+        ],
+        # 可选操作列表
+        "actions": {
+            "craft": {
+                "name": "合成物品",
+                "description": "向OC客户端发送合成物品请求",
+                "function": craft_item,
+                "args": [
+                    {
+                        "field": "client_id",
+                        "type": "str",
+                        "default": "",
+                        "description": "客户端 ID",
+                    },
+                    {
+                        "field": "item_name",
+                        "type": "str",
+                        "description": "name",
+                    },
+                    {
+                        "field": "item_damage",
+                        "type": "int",
+                        "description": "damage",
+                    },
+                    {
+                        "field": "item_amount",
+                        "type": "int",
+                        "default": 1,
+                        "description": "数量",
+                    },
+                    {
+                        "field": "cpu_name",
+                        "type": "str",
+                        "default": None,
+                        "description": "指定合成的CPU",
+                    },
+                    {
+                        "field": "label",
+                        "type": "str",
+                        "default": None,
+                        "description": "label",
+                    },
+                ],
+            },
+            "notify": {
+                "name": "发送通知",
+                "description": "发送HTTP请求推送API，通知用户",
+                "function": send_notification,
+                "args": [
+                    {
+                        "field": "method",
+                        "type": "str",
+                        "default": "GET",
+                        "description": "请求方法",
+                    },
+                    {
+                        "field": "url",
+                        "type": "str",
+                        "description": "请求地址",
+                    },
+                    {
+                        "field": "headers",
+                        "type": "str",
+                        "default": None,
+                        "description": "请求头",
+                    },
+                    {
+                        "field": "params",
+                        "type": "dict",
+                        "default": None,
+                        "description": "请求参数",
+                    },
+                    {
+                        "field": "data",
+                        "type": "dict",
+                        "default": None,
+                        "description": "请求体",
+                    },
+                ],
+            },
+        },
+    },
+}
+
+
+# 自动化流程定时任务设置
+timer_config = {
+    "延迟任务": {
+        "description": "在一段时间后执行任务",
+        "args": [
+            {
+                "key": "delay",
+                "field": "delay",
+                "type": "int",
+                "description": "延迟时间(秒)",
+            },
+        ],
+        "actions": {
+            "craft": {
+                "name": "合成物品",
+                "description": "向OC客户端发送合成物品请求",
+                "function": craft_item,
+                "args": [
+                    {
+                        "field": "client_id",
+                        "type": "str",
+                        "default": "",
+                        "description": "客户端 ID",
+                    },
+                    {
+                        "field": "item_name",
+                        "type": "str",
+                        "description": "name",
+                    },
+                    {
+                        "field": "item_damage",
+                        "type": "int",
+                        "description": "damage",
+                    },
+                    {
+                        "field": "item_amount",
+                        "type": "int",
+                        "default": 1,
+                        "description": "数量",
+                    },
+                    {
+                        "field": "cpu_name",
+                        "type": "str",
+                        "default": None,
+                        "description": "指定合成的CPU",
+                    },
+                    {
+                        "field": "label",
+                        "type": "str",
+                        "default": None,
+                        "description": "label",
+                    },
+                ],
+            },
+        },
+    },
+    "定时任务": {
+        "description": "在指定时间执行任务",
+        "args": [
+            {
+                "key": "time",
+                "field": "time",
+                "type": "str",
+                "description": "执行时间",
+            },
+        ],
+        "actions": {
+            "craft": {
+                "name": "合成物品",
+                "description": "向OC客户端发送合成物品请求",
+                "function": craft_item,
+                "args": [
+                    {
+                        "field": "client_id",
+                        "type": "str",
+                        "default": "",
+                        "description": "客户端 ID",
+                    },
+                    {
+                        "field": "item_name",
+                        "type": "str",
+                        "description": "name",
+                    },
+                    {
+                        "field": "item_damage",
+                        "type": "int",
+                        "description": "damage",
+                    },
+                    {
+                        "field": "item_amount",
+                        "type": "int",
+                        "default": 1,
+                        "description": "数量",
+                    },
+                    {
+                        "field": "cpu_name",
+                        "type": "str",
+                        "default": None,
+                        "description": "指定合成的CPU",
+                    },
+                    {
+                        "field": "label",
+                        "type": "str",
+                        "default": None,
+                        "description": "label",
+                    },
+                ],
+            },
+        },
+    },
+}
+
+# action模板
+action_template = {
+    "CPU空闲时": {
+        "notify": [
+            {
+                "name": "发送QQ群通知",
+                "description": "发送QQ群通知，需要在环境变量中配置参数",
+                "action_kwargs": {
+                    "method": "POST",
+                    "url": "http://<ONEBOT_SERVER_ADDRESS>/send_group_msg",
+                    "headers": {"Authorization": "<ONEBOT_SERVER_TOKEN>"},
+                    "data": """{"group_id": "<TARGET_GROUP_ID>","message": "CPU '<CPU_NAME>' 已空闲"}""",
+                },
+                "args": {
+                    # action_kwargs中属于key-value类型的参数
+                    "key_values": ["headers"],
+                },
+            },
+        ]
+    }
+}
+
+
+SERVER_TOKEN = os.getenv("SERVER_TOKEN")
