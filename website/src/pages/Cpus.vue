@@ -35,7 +35,7 @@
                                                 <el-tag v-if="cpu.busy" type="warning" effect="light">繁忙</el-tag>
                                                 <el-tag v-else type="success" effect="light">空闲</el-tag>
                                             </h1>
-                                            <h1>可存储: {{ cpu.storage / 1024 }} KB</h1>
+                                            <h1>可存储: {{ (cpu.storage / (1024 * 1024 * 1024)).toFixed(2) }} GB</h1>
                                             <h1>并行: {{ cpu.coprocessors }}</h1>
                                         </div>
                                         <div class="cpu-output">
@@ -263,6 +263,13 @@ export default {
                         let name = cpu.name;
                         if (name === "") {
                             name = `CPU #${cpuIndex + 1}`;
+                            // 如果有最终制作物品，则在CPU名称后添加物品名称
+                            if (cpu.cpu && cpu.cpu.finalOutput) {
+                                const outputItem = this.parseOutputItem(cpu.cpu.finalOutput);
+                                if (outputItem && outputItem.title) {
+                                    name += ` (${outputItem.title})`;
+                                }
+                            }
                             cpuIndex++;
                         }
                         cpuList.push({

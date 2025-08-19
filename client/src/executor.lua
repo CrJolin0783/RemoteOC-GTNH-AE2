@@ -8,7 +8,6 @@ local env = require("env")
 local logger = require("lib/logger")
 local json = require("lib/json")
 local dumpjson = require("lib/json2")
-local deduplicator = require("src.deduplicator")
 
 
 local executor = {}
@@ -104,47 +103,16 @@ function executor.processCommands(command_table, isChunked)
 
     for cid, command_content in pairs(command_table) do
         logger.debug("Processing command with ID: " .. tostring(cid)) -- Debug: 输出当前处理的命令ID
-        
-        -- 生成命令指纹用于去重
-        local commandFingerprint = "command_" .. tostring(cid) .. "_" .. tostring(command_content)
-        
-        -- 检查是否为重复命令
-        local isDuplicate, cachedResult = deduplicator.isDuplicateRequest("command", {
-            id = cid,
-            content = command_content
-        })
-        
-        if isDuplicate and cachedResult then
-            logger.debug("Using cached result for command ID: " .. tostring(cid))
-            command_result_table[cid] = cachedResult
-        else
-            local success, command_result = executeCommand(command_content)
+        local success, command_result = executeCommand(command_content)
 
-            if success then
-                local resultData
-                if isChunked and command_result.message == "success" then
-                    resultData = command_result.data
-                else
-                    resultData = json.encode(command_result)
-                end
-                
-                command_result_table[cid] = resultData
-                
-                -- 缓存命令结果
-                deduplicator.cacheRequest("command", {
-                    id = cid,
-                    content = command_content
-                }, resultData)
+        if success then
+            if isChunked and command_result.message == "success" then
+                command_result_table[cid] = command_result.data
             else
-                local errorResult = json.encode({ message = command_result })
-                command_result_table[cid] = errorResult
-                
-                -- 缓存错误结果
-                deduplicator.cacheRequest("command", {
-                    id = cid,
-                    content = command_content
-                }, errorResult)
+                command_result_table[cid] = json.encode(command_result)
             end
+        else
+            command_result_table[cid] = json.encode({ message = command_result })
         end
     end
     return command_result_table
@@ -153,14 +121,6 @@ end
 -- 从服务器获取命令的函数
 function executor.fetchCommands()
     logger.debug("Fetching commands from server...") -- Debug: 输出正在获取命令
-
-    -- 检查是否有缓存的命令
-    local cacheKey = "commands_" .. env.clientId
-    local cachedCommands = deduplicator.getCachedData(cacheKey)
-    if cachedCommands then
-        logger.debug("Using cached commands")
-        return cachedCommands.taskId, cachedCommands.commands, cachedCommands.is_chunked
-    end
 
     local headers = getHeaders()
     local req = internet.request(serverUrl, nil, headers)
@@ -201,6 +161,7 @@ function executor.fetchCommands()
     -- 将 JSON 响应解码为 Lua 表
     local res = json.decode(response)
 
+
     -- 检查响应码
     if not res or res.code ~= 200 then
         if res.message then
@@ -218,14 +179,8 @@ function executor.fetchCommands()
         return nil, nil, nil
     end
 
-    logger.debug("Task ID: " .. tostring(command_table.taskId))
 
-    -- 缓存命令结果（短期缓存，避免重复请求）
-    deduplicator.cacheData(cacheKey, {
-        taskId = command_table.taskId,
-        commands = command_table.commands,
-        is_chunked = command_table.is_chunked
-    })
+    logger.debug("Task ID: " .. tostring(command_table.taskId))
 
     -- 返回 taskId 和 commands
     return command_table.taskId, command_table.commands, command_table.is_chunked

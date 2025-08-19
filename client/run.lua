@@ -3,8 +3,6 @@ local event = require("event")
 local executor = require("src.executor")
 local env = require("env")
 local logger = require("lib/logger")
-local deduplicator = require("src.deduplicator")
-local json = require("lib/json")
 
 local timerId  -- 存储计时器的 ID
 local shouldExit = false  -- 退出标志
@@ -64,27 +62,13 @@ end
 timerId = event.timer(env.pollingInterval, pollServer, math.huge)
 
 
--- 初始化数据去重器
-local deduplicatorConfig = {
-    maxCacheSize = 500,           -- 最大缓存条目数
-    cacheTTL = 60,               -- 缓存生存时间（秒）
-    maxHistorySize = 50,         -- 最大历史记录数
-    enableFingerprintCheck = true -- 启用指纹检查
-}
-deduplicator.initialize(deduplicatorConfig)
-
 logger.info("Program started at " .. os.date("%Y-%m-%d %H:%M:%S"))
-logger.info("Data deduplicator initialized with config: " .. json.encode(deduplicatorConfig))
-
 while true do
     local eventType = event.pull()
     if eventType == "interrupted" then
         shouldExit = true
         if event.cancel(timerId) then
             logger.info("Interrupt received, shutting down...")
-            -- 输出缓存统计信息
-            local stats = deduplicator.getCacheStats()
-            logger.info("Cache stats: " .. json.encode(stats))
         else
             logger.error("error")
         end

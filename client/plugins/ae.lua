@@ -1,154 +1,42 @@
 local component = require("component")
 local base64 = require("lib.base64")
 local env = require("env")
-local logger = require("lib.logger")
 
 local aeAddress = env.aeAddress
 
 local me
 
-if component.proxy(aeAddress) then
-    me = component.proxy(aeAddress)
-elseif component.isAvailable("me_controller") then
-    me = component.me_controller
-elseif component.isAvailable("me_interface") then
-    me = component.me_interface
-else
+-- 自动获取ME控制器或ME接口地址
+local function findMeComponent()
+    -- 如果配置文件中指定了地址且该地址有效，则使用配置的地址
+    if aeAddress and aeAddress ~= "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" then
+        local proxy = component.proxy(aeAddress)
+        if proxy then
+            return proxy
+        end
+    end
+    
+    -- 自动查找可用的ME控制器或ME接口
+    local components = component.list("me_controller")
+    for addr in pairs(components) do
+        return component.proxy(addr)
+    end
+    
+    components = component.list("me_interface")
+    for addr in pairs(components) do
+        return component.proxy(addr)
+    end
+    
+    return nil
+end
+
+me = findMeComponent()
+if not me then
     error("未找到 AE 网络")
 end
 
 ae = {}
 
--- 高级过滤和分页功能
-local function applyFilters(items, filters)
-    if not items or not filters then return items end
-    
-    local filtered = {}
-    local filterCount = 0
-    
-    for _, item in pairs(items) do
-        local matches = true
-        
-        -- 名称过滤
-        if filters.name and item.name then
-            if not string.match(string.lower(item.name), string.lower(filters.name)) then
-                matches = false
-            end
-        end
-        
-        -- 标签过滤
-        if matches and filters.label and item.label then
-            if not string.match(string.lower(item.label), string.lower(filters.label)) then
-                matches = false
-            end
-        end
-        
-        -- 最小数量过滤
-        if matches and filters.min_size and item.size then
-            if item.size < filters.min_size then
-                matches = false
-            end
-        end
-        
-        -- 最大数量过滤
-        if matches and filters.max_size and item.size then
-            if item.size > filters.max_size then
-                matches = false
-            end
-        end
-        
-        -- 仅可合成物品过滤
-        if matches and filters.craftable_only then
-            if not item.isCraftable then
-                matches = false
-            end
-        end
-        
-        -- 标签过滤
-        if matches and filters.has_tag then
-            if not item.hasTag then
-                matches = false
-            end
-        end
-        
-        if matches then
-            table.insert(filtered, item)
-            filterCount = filterCount + 1
-        end
-        
-        -- 性能优化：限制过滤检查数量
-        if filterCount > 10000 then
-            logger.warn("Filter limit reached, stopping early")
-            break
-        end
-    end
-    
-    logger.debug("Applied filters: " .. filterCount .. " items matched")
-    return filtered
-end
-
--- 分页功能
-local function applyPagination(items, page, pageSize)
-    if not items then return {} end
-    
-    page = page or 1
-    pageSize = pageSize or 100
-    
-    local totalItems = #items
-    local startIndex = (page - 1) * pageSize + 1
-    local endIndex = math.min(startIndex + pageSize - 1, totalItems)
-    
-    local paginated = {}
-    for i = startIndex, endIndex do
-        if items[i] then
-            table.insert(paginated, items[i])
-        end
-    end
-    
-    logger.debug("Applied pagination: page " .. page .. ", size " .. pageSize .. ", showing " .. #paginated .. " of " .. totalItems .. " items")
-    
-    return {
-        items = paginated,
-        page = page,
-        pageSize = pageSize,
-        totalItems = totalItems,
-        totalPages = math.ceil(totalItems / pageSize)
-    }
-end
-
--- 排序功能
-local function applySorting(items, sortBy, sortOrder)
-    if not items or not sortBy then return items end
-    
-    local sorted = {}
-    for _, item in pairs(items) do
-        table.insert(sorted, item)
-    end
-    
-    sortOrder = sortOrder or "asc"
-    
-    table.sort(sorted, function(a, b)
-        local aVal = a[sortBy] or 0
-        local bVal = b[sortBy] or 0
-        
-        if type(aVal) == "string" and type(bVal) == "string" then
-            if sortOrder == "asc" then
-                return string.lower(aVal) < string.lower(bVal)
-            else
-                return string.lower(aVal) > string.lower(bVal)
-            end
-        else
-            if sortOrder == "asc" then
-                return aVal < bVal
-            else
-                return aVal > bVal
-            end
-        end
-    end)
-    
-    logger.debug("Applied sorting: " .. sortBy .. " " .. sortOrder)
-    return sorted
-end
 
 local function parseItem(items)
     if items == nil then return nil end
@@ -381,37 +269,6 @@ function ae.getAllCraftables()
     end
 
     return { message = "success", data = result }
-end
-
-function ae.getFilteredItems(filters, page, pageSize, sortBy, sortOrder)
-    -- 获取过滤后的物品信息
-    local items = me.getItemsInNetwork()
-    if not items then return { message = "no items" } end
-    
-    -- 转换为简单信息格式
-    local simpleItems = {}
-    for i, item in pairs(items) do
-        if item.size ~= nil or item.amount ~= nil then
-            table.insert(simpleItems, simpleItemInfo(item))
-        end
-        if i % 50 == 0 then
-            os.sleep(0)
-        end
-    end
-    
-    -- 应用过滤
-    local filtered = applyFilters(simpleItems, filters)
-    
-    -- 应用排序
-    local sorted = applySorting(filtered, sortBy, sortOrder)
-    
-    -- 应用分页
-    local paginated = applyPagination(sorted, page, pageSize)
-    
-    return { 
-        message = "success", 
-        data = paginated 
-    }
 end
 
 function ae.cancelCraftingByCpuName(cpuName)
