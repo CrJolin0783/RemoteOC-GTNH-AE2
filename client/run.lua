@@ -69,7 +69,8 @@ local function autoUploadData()
         local currentTime = computer.uptime()
         
         -- 检查是否需要上传CPU数据
-        if currentTime - lastCpuUploadTime >= env.autoUploadCpuInterval then
+        local cpuInterval = env.autoUploadCpuInterval or 30
+        if currentTime - lastCpuUploadTime >= cpuInterval then
             logger.debug("Auto uploading CPU data...")
             
             -- 获取CPU数据
@@ -89,7 +90,8 @@ local function autoUploadData()
         end
         
         -- 检查是否需要上传物品数据
-        if currentTime - lastItemUploadTime >= env.autoUploadItemInterval then
+        local itemInterval = env.autoUploadItemInterval or 60
+        if currentTime - lastItemUploadTime >= itemInterval then
             logger.debug("Auto uploading item data...")
             
             -- 获取物品数据
