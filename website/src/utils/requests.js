@@ -19,6 +19,13 @@ class Requests {
     post(url, data = {}) {
         return this.axiosInstance.post(url, data);
     }
+    
+    // 获取缓存数据
+    getCachedData(dataType) {
+        return this.axiosInstance.get('/api/cache/data', {
+            params: { data_type: dataType }
+        });
+    }
 
 }
 

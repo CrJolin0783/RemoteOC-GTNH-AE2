@@ -53,6 +53,29 @@ if __name__ == "__main__":
     # 清理旧数据库数据
     db_manager.cleanup_old_data(days=7)
     
+    # 等待Redis完全启动并可连接
+    import time
+    import redis
+    import os
+    
+    # 如果使用Redis，等待其完全启动
+    use_redis = os.getenv('USE_REDIS', 'true').lower() == 'true'
+    if use_redis:
+        redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
+        for attempt in range(15):  # 最多尝试15次
+            try:
+                # 尝试连接Redis
+                redis_client = redis.from_url(redis_url, decode_responses=False)
+                redis_client.ping()
+                logger.info("Redis is ready and connected")
+                redis_client.close()
+                break
+            except Exception as e:
+                logger.warning(f"Waiting for Redis to be ready... Attempt {attempt + 1}/15")
+                time.sleep(3)  # 等待3秒再重试
+        else:
+            logger.error("Failed to connect to Redis after 15 attempts")
+    
     try:
         # 使用解析后的 host 和 port 启动 Uvicorn
         uvicorn.run(app, host=args.host, port=args.port, log_config=log_config, log_level=LOG_LEVEL)

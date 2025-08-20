@@ -25,6 +25,11 @@ local env = {
 
     -- 分块上报接口
     chunkedReportPath = "/api/task/chunked_report",
+
+    -- 数据自动上传配置
+    autoUploadInterval = 30,  -- 自动上传间隔（秒）
+    autoUploadCpuInterval = 30,  -- CPU数据上传间隔（秒）
+    autoUploadItemInterval = 60,  -- 物品数据上传间隔（秒）
 }
 
 return env

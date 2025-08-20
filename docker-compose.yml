@@ -50,7 +50,8 @@ services:
       - "26766:1030"
     restart: always
     depends_on:
-      - roc-gtnh-redis
+      roc-gtnh-redis:
+        condition: service_healthy
 
 volumes:
   redis_data:

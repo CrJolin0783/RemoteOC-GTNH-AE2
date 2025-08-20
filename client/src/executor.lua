@@ -308,6 +308,71 @@ function executor.reportChunkedResults(taskId, command_result_table)
     logger.debug("Report done.")
 end
 
+-- 上传数据到服务端缓存的函数
+function executor.uploadDataToCache(dataType, data)
+    logger.debug("Uploading " .. tostring(dataType) .. " data to server cache...")
+    
+    local cacheUploadUrl = env.baseUrl .. "/api/cache/upload"
+    local headers = getHeaders()
+    
+    local uploadData = {
+        type = dataType,
+        data = data,
+        timestamp = os.time()
+    }
+    
+    local json_data = json.encode(uploadData)
+    local req = internet.request(
+        cacheUploadUrl,
+        json_data,
+        headers
+    )
+    
+    if not req then
+        logger.error("Unable to connect to the server for data upload.")
+        return false
+    end
+    
+    -- 等待请求完成
+    local startTime = computer.uptime()
+    local timeout = 4
+    while not req.finishConnect() do
+        if computer.uptime() - startTime > timeout then
+            logger.error("Timeout while uploading data to the server.")
+            close(req)
+            return false
+        end
+        os.sleep(0)
+    end
+    
+    -- 读取响应
+    local response = ""
+    local chunk
+    repeat
+        chunk = req.read()
+        if chunk then
+            response = response .. chunk
+        end
+    until not chunk
+    
+    close(req)
+    
+    -- 检查响应
+    if response and response ~= "" then
+        local res = json.decode(response)
+        if res and res.code == 200 then
+            logger.debug("Data uploaded successfully to cache")
+            return true
+        else
+            logger.error("Failed to upload data to cache: " .. tostring(res and res.message or "Unknown error"))
+            return false
+        end
+    end
+    
+    logger.error("Empty response when uploading data to cache")
+    return false
+end
+
 loadPlugins()
 
 return executor

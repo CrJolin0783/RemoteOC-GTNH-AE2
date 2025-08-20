@@ -113,3 +113,40 @@ docker-compose down     # Stop services
 - Frontend can be deployed as static files (Nginx/Apache)
 - Backend runs as FastAPI application with Uvicorn
 - Supports both development and production configurations
+
+## Data Caching Architecture
+
+为了减少前端访问者的数据流量，我们实现了一个数据缓存架构，让OC客户端定期将AE2数据上传到服务端缓存，前端直接从缓存获取数据。
+
+### 架构设计
+
+1. **OC客户端定时上传**：
+   - 客户端定时执行AE2数据获取任务
+   - 将数据上传到服务端缓存系统
+   - 使用分布式缓存（Redis/Memory）存储数据
+
+2. **服务端缓存管理**：
+   - 使用智能缓存系统，支持数据指纹检测变更
+   - 支持增量同步，减少数据传输
+   - 提供缓存统计和管理接口
+
+3. **前端直接获取缓存数据**：
+   - 前端通过API直接从缓存获取数据
+   - 减少对OC客户端的直接请求
+   - 支持数据变更检测，只获取更新的数据
+
+### 实现详情
+
+1. **服务端修改**：
+   - 在`server/config.py`中添加了定时数据上传任务配置
+   - 在`server/callback.py`中实现了数据上传回调函数
+   - 在`server/app/task.py`中添加了缓存数据获取和上传接口
+
+2. **客户端修改**：
+   - 在`client/env.lua`中添加了数据上传配置
+   - 在`client/src/executor.lua`中实现了数据上传到缓存的函数
+   - 在`client/run.lua`中实现了定期数据上传功能
+
+3. **前端修改**：
+   - 在`website/src/utils/requests.js`中添加了缓存数据获取方法
+   - 在`website/src/pages/Cpus.vue`中实现了从缓存获取数据的功能

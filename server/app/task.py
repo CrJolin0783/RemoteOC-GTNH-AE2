@@ -12,6 +12,7 @@ import re
 import uuid
 import gzip
 import base64
+import time
 from typing import Optional
 
 
@@ -380,3 +381,64 @@ async def set_cache_data(key: str = Form(..., description="缓存键"),
         return {"code": 200, "message": "Cache data set", "data": {"result": result}}
     except json.JSONDecodeError:
         return {"code": 400, "message": "Invalid JSON data", "data": None}
+
+
+@router.get("/cache/data", response_model=StandardResponseModel, dependencies=[Depends(token_required)])
+async def get_cached_data(data_type: str = Query(..., description="数据类型: cpu, item")):
+    """
+    获取缓存的AE2数据
+    """
+    cache_key = f"ae_{data_type}_data"
+    cached_data = distributed_cache.get(cache_key)
+    
+    if cached_data:
+        return {
+            "code": 200,
+            "message": "Cached data retrieved successfully",
+            "data": cached_data
+        }
+    else:
+        return {
+            "code": 404,
+            "message": "Cached data not found",
+            "data": None
+        }
+
+
+@router.post("/cache/upload", response_model=StandardResponseModel, dependencies=[Depends(token_required)])
+async def upload_data_to_cache(request: Request, x_client_id: Optional[str] = Header(None, description="客户端id")):
+    """
+    上传数据到缓存
+    """
+    try:
+        body = await request.body()
+        decoded_body = decode_request_body(body)
+        json_data = json.loads(decoded_body)
+        
+        data_type = json_data.get("type")
+        data = json_data.get("data")
+        timestamp = json_data.get("timestamp")
+        
+        if not data_type or not data:
+            return {"code": 400, "message": "Missing type or data", "data": None}
+        
+        cache_key = f"ae_{data_type}_data"
+        cached_result = distributed_cache.set(cache_key, {
+            "data": data,
+            "type": data_type,
+            "timestamp": timestamp,
+            "updated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "client_id": x_client_id
+        }, ttl=300)  # 缓存5分钟
+        
+        return {
+            "code": 200,
+            "message": f"Data uploaded to cache successfully with key: {cache_key}",
+            "data": {"cache_key": cache_key, "result": cached_result}
+        }
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON 解析失败: {str(e)}")
+        raise HTTPException(status_code=400, detail="JSON 格式错误")
+    except Exception as e:
+        logger.error(f"Error uploading data to cache: {str(e)}")
+        return {"code": 500, "message": f"Error uploading data to cache: {str(e)}", "data": None}

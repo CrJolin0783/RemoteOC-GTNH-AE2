@@ -35,12 +35,13 @@
                                                 <el-tag v-if="cpu.busy" type="warning" effect="light">繁忙</el-tag>
                                                 <el-tag v-else type="success" effect="light">空闲</el-tag>
                                             </h1>
-                                            <h1>可存储: {{ (cpu.storage / (1024 * 1024 * 1024)).toFixed(2) }} GB</h1>
+                                            <h1>可存储: {{ formatStorage(cpu.storage) }}</h1>
                                             <h1>并行: {{ cpu.coprocessors }}</h1>
                                         </div>
                                         <div class="cpu-output">
                                             <img v-if="cpu.output.image" :src="cpu.output.image" alt="output"
                                                 class="output-image" />
+                                            <div v-if="cpu.output.title" class="output-title">{{ cpu.output.title }}</div>
                                         </div>
                                     </div>
                                 </template>
@@ -99,6 +100,7 @@
 import bus from 'vue3-eventbus';
 import { inject } from 'vue';
 import { fetchStatus, addTask, createPollingController } from '@/utils/task'
+import Requests from '@/utils/requests';
 import itemUtil from "@/utils/items";
 import NumberFormat from '@/components/NumberFormat.vue';
 import CpuItem from '@/components/CpuItem.vue';
@@ -124,6 +126,7 @@ export default {
                 label: 'name',
                 value: 'id',
             },
+            useCache: true,  // 是否使用缓存数据
         };
     },
     created() {
@@ -135,7 +138,12 @@ export default {
         };
     },
     mounted() {
-        this.startPolling("getCpuDetailList");
+        // 优先从缓存获取数据
+        if (this.useCache) {
+            this.fetchCachedCpuData();
+        } else {
+            this.startPolling("getCpuDetailList");
+        }
         bus.on('refreshCpuList', this.handleTaskResult);
     },
     beforeUnmount() {
@@ -155,6 +163,109 @@ export default {
                 return 'stored-card';
             } else {
                 return '';
+            }
+        },
+        // 从缓存获取CPU数据
+        async fetchCachedCpuData() {
+            this.loading = true;
+            try {
+                const response = await Requests.getCachedData('cpu');
+                const data = response.data;
+                
+                if (data.code === 200 && data.data) {
+                    // 处理缓存的数据
+                    this.handleCachedCpuData(data.data.data);
+                    this.lastCpuUpdate = data.data.updated_at || '未知';
+                } else {
+                    // 如果缓存中没有数据，回退到原来的任务方式
+                    console.log('No cached data found, falling back to task method');
+                    this.startPolling("getCpuDetailList");
+                }
+            } catch (error) {
+                console.error('Error fetching cached CPU data:', error);
+                // 如果获取缓存数据失败，回退到原来的任务方式
+                this.startPolling("getCpuDetailList");
+            } finally {
+                this.loading = false;
+            }
+        },
+        // 处理缓存的CPU数据
+        handleCachedCpuData(cachedData) {
+            try {
+                let result = cachedData;
+                
+                // 如果是字符串，尝试解析JSON
+                if (typeof result === 'string') {
+                    result = JSON.parse(result);
+                }
+                
+                // 如果是数组，取第一个元素
+                if (Array.isArray(result)) {
+                    result = result[0];
+                    // 如果还是字符串，再次解析
+                    if (typeof result === 'string') {
+                        result = JSON.parse(result);
+                    }
+                }
+                
+                if (result.message === undefined || result.message !== 'success') {
+                    this.$message.warning(result.message ? result.message : "未知错误");
+                    return;
+                }
+                
+                const previousCpuName = this.currentCpu?.name;
+                this.currentCpu = { name: undefined, items: [] };
+                
+                let cpuIndex = 0;
+                let cpus = result.data;
+                let cpuList = [];
+                
+                for (let cpu of cpus) {
+                    let name = cpu.name;
+                    if (name === "") {
+                        name = `CPU #${cpuIndex + 1}`;
+                        // 如果有最终制作物品，则在CPU名称后添加物品名称
+                        if (cpu.cpu && cpu.cpu.finalOutput) {
+                            const outputItem = this.parseOutputItem(cpu.cpu.finalOutput);
+                            if (outputItem && outputItem.title) {
+                                name += ` (${outputItem.title})`;
+                            }
+                        }
+                        cpuIndex++;
+                    }
+                    cpuList.push({
+                        name: name,
+                        busy: cpu.busy,
+                        coprocessors: cpu.coprocessors,
+                        storage: cpu.storage,
+                        output: cpu.cpu && cpu.cpu.finalOutput ? this.parseOutputItem(cpu.cpu.finalOutput) : {},
+                        items: this.parseItemStack(cpu.cpu),
+                    });
+                }
+                
+                // cpuList按名字排序
+                cpuList.sort((a, b) => a.name.localeCompare(b.name));
+                // 给每个CPU添加id，递增
+                cpuList.forEach((cpu, index) => {
+                    cpu.id = index;
+                    // 还原选择的CPU
+                    if (previousCpuName && previousCpuName === cpu.name) {
+                        this.currentCpu = cpu;
+                        this.cpuSelected = index;
+                        this.selectCpu = index;
+                    }
+                });
+                
+                // 当选择的CPU不存在默认选择第一个CPU
+                if (!this.currentCpu.name) {
+                    this.currentCpu = cpuList[0];
+                    this.cpuSelected = 0;
+                    this.selectCpu = 0;
+                }
+                this.cpuList = cpuList;
+            } catch (e) {
+                console.error('Error handling cached CPU data:', e);
+                this.$message.warning('处理缓存数据时出错: ' + e.message);
             }
         },
         startPolling(taskId) {
@@ -315,13 +426,28 @@ export default {
             this.headerLoading = false;
         },
         getCpuList() {
-            this.headerLoading = true;
-            addTask("getCpuDetailList", null, () => {
-                this.startPolling("getCpuDetailList")
-            })
+            // 优先从缓存获取数据
+            if (this.useCache) {
+                this.fetchCachedCpuData();
+            } else {
+                this.headerLoading = true;
+                addTask("getCpuDetailList", null, () => {
+                    this.startPolling("getCpuDetailList")
+                })
+            }
         },
         refreshCpuList() {
             this.startPolling("getCpuDetailList");
+        },
+        formatStorage(storage) {
+            // 将字节转换为合适的单位
+            const gb = storage / (1024 * 1024 * 1024);
+            if (gb >= 1000) {
+                const eb = gb / (1024 * 1024 * 1024);
+                return `${eb.toFixed(2)} EB`;
+            } else {
+                return `${gb.toFixed(2)} GB`;
+            }
         }
     }
 };
@@ -478,15 +604,24 @@ export default {
 }
 
 @media (max-width: 1300px) {
-    .cpu-output .output-image {
+    .cpu-output .output-title {
         display: none;
-        /* 隐藏 cpu-output */
+        /* 隐藏 cpu-output 标题 */
     }
 }
 
 .output-image {
     width: 64px;
     height: 64px;
+}
+
+.output-title {
+    font-size: 12px;
+    text-align: center;
+    width: 64px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .cpu-info h1 {

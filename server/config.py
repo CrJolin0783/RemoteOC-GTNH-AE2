@@ -22,6 +22,23 @@ timer_task_config = {
     #     # 命令执行后的回调函数，callback(results: list)
     #     'callback': test,
     # },
+    # 定时数据上传任务
+    "auto_upload_cpu_data": {
+        'interval': 30,  # 每30秒上传一次CPU数据
+        'client_id': 'client_01',
+        'commands': [
+            "return ae.getCpuList(true)",  # 获取CPU详细信息
+        ],
+        'callback': auto_upload_data_callback,  # 数据上传回调函数
+    },
+    "auto_upload_item_data": {
+        'interval': 60,  # 每60秒上传一次物品数据
+        'client_id': 'client_01',
+        'commands': [
+            "return ae.getAllSilempleItems()",  # 获取所有物品简单信息
+        ],
+        'callback': auto_upload_data_callback,  # 数据上传回调函数
+    },
 }
 
 

@@ -225,15 +225,23 @@ class RedisCache:
         if not REDIS_AVAILABLE:
             return
             
-        try:
-            self.redis_client = redis.from_url(self.redis_url, decode_responses=False)
-            # 测试连接
-            self.redis_client.ping()
-            self.connected = True
-            logger.info(f"Connected to Redis at {self.redis_url}")
-        except Exception as e:
-            logger.error(f"Failed to connect to Redis: {e}")
-            self.connected = False
+        # 尝试连接Redis，最多重试5次
+        for attempt in range(5):
+            try:
+                self.redis_client = redis.from_url(self.redis_url, decode_responses=False)
+                # 测试连接
+                self.redis_client.ping()
+                self.connected = True
+                logger.info(f"Connected to Redis at {self.redis_url}")
+                return
+            except Exception as e:
+                logger.warning(f"Attempt {attempt + 1} failed to connect to Redis: {e}")
+                if attempt < 4:  # 不是最后一次尝试，等待一段时间再重试
+                    import time
+                    time.sleep(3)  # 增加等待时间到3秒
+                else:
+                    logger.error(f"Failed to connect to Redis after 5 attempts: {e}")
+                    self.connected = False
     
     def _serialize(self, data: Any) -> bytes:
         """使用MessagePack序列化数据"""
