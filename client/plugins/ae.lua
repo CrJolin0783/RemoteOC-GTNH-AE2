@@ -134,6 +134,9 @@ function ae.getCpuInfoByName(cpuName)
     return { message = "没有找到名称为 " .. cpuName .. " 的 CPU" }
 end
 
+-- 返回ae模块，使其在全局范围内可用
+return ae
+
 function ae.getCpuList(detail)
     -- 获取所有CPU信息
     local cpus = me.getCpus()
@@ -299,3 +302,6 @@ function ae.cancelCraftingByCpuName(cpuName)
 
     return { message = "没有找到名称为 " .. cpuName .. " 的 CPU" }
 end
+
+-- 返回ae模块，使其在全局范围内可用
+return ae

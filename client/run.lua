@@ -115,18 +115,30 @@ local function autoUploadData()
 end
 
 -- 启动定时器
-timerId = event.timer(env.pollingInterval, pollServer, math.huge)
-autoUploadTimerId = event.timer(env.autoUploadInterval, autoUploadData, math.huge)
+timerId = event.timer(env.pollingInterval or 8, pollServer, math.huge)
+
+-- 检查自动上传配置并启动定时器
+local uploadInterval = env.autoUploadInterval or 30
+if uploadInterval > 0 then
+    autoUploadTimerId = event.timer(uploadInterval, autoUploadData, math.huge)
+    logger.info("Auto upload timer started with interval: " .. uploadInterval .. "s")
+else
+    logger.info("Auto upload disabled")
+end
 
 logger.info("Program started at " .. os.date("%Y-%m-%d %H:%M:%S"))
-logger.info("Polling interval: " .. env.pollingInterval .. "s, Auto upload interval: " .. env.autoUploadInterval .. "s")
+logger.info("Polling interval: " .. (env.pollingInterval or 8) .. "s, Auto upload interval: " .. (env.autoUploadInterval or 30) .. "s")
 
 while true do
     local eventType = event.pull()
     if eventType == "interrupted" then
         shouldExit = true
         local cancelled1 = event.cancel(timerId)
-        local cancelled2 = event.cancel(autoUploadTimerId)
+        local cancelled2 = true
+        -- 只有当自动上传定时器存在时才取消它
+        if autoUploadTimerId then
+            cancelled2 = event.cancel(autoUploadTimerId)
+        end
         if cancelled1 and cancelled2 then
             logger.info("Interrupt received, shutting down...")
         else
